@@ -1,0 +1,108 @@
+--[[
+	Player Noclip Script
+	Author: ItoRenz00
+	
+	Description:
+	Script ini membuat semua player bisa saling menembus (noclip) satu sama lain
+	namun tetap memiliki collision dengan tanah, dinding, dan objek lainnya.
+	
+	Installation:
+	Letakkan script ini di ServerScriptService sebagai Script (BUKAN LocalScript)
+--]]
+
+local Players = game:GetService("Players")
+local PhysicsService = game:GetService("PhysicsService")
+
+-- Konstanta
+local PLAYER_COLLISION_GROUP = "Players"
+local DEFAULT_COLLISION_GROUP = "Default"
+
+--[[
+	Setup Collision Groups
+	Membuat collision group untuk players dan mengatur aturan collision
+--]]
+local function setupCollisionGroups()
+	local groups = PhysicsService:GetRegisteredCollisionGroups()
+	local hasPlayerGroup = false
+	
+	-- Cek apakah collision group "Players" sudah terdaftar
+	for _, group in pairs(groups) do
+		if group.name == PLAYER_COLLISION_GROUP then
+			hasPlayerGroup = true
+			break
+		end
+	end
+	
+	-- Buat collision group jika belum ada
+	if not hasPlayerGroup then
+		PhysicsService:RegisterCollisionGroup(PLAYER_COLLISION_GROUP)
+	end
+	
+	-- Atur collision rules:
+	-- Players tidak collision dengan Players lain (noclip)
+	PhysicsService:CollisionGroupSetCollidable(PLAYER_COLLISION_GROUP, PLAYER_COLLISION_GROUP, false)
+	
+	-- Players tetap collision dengan Default (tanah, dinding, objek)
+	PhysicsService:CollisionGroupSetCollidable(PLAYER_COLLISION_GROUP, DEFAULT_COLLISION_GROUP, true)
+end
+
+--[[
+	Setup Character
+	Mengatur collision group untuk semua part dalam karakter player
+	@param character - Model karakter player
+--]]
+local function setupCharacter(character)
+	-- Tunggu karakter fully loaded
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	local rootPart = character:WaitForChild("HumanoidRootPart", 10)
+	
+	if not humanoid or not rootPart then
+		warn("Failed to setup character: Missing Humanoid or HumanoidRootPart")
+		return
+	end
+	
+	-- Set semua part karakter ke collision group "Players"
+	for _, descendant in pairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			descendant.CollisionGroup = PLAYER_COLLISION_GROUP
+		end
+	end
+	
+	-- Monitor part baru yang ditambahkan (accessories, tools, dll)
+	character.DescendantAdded:Connect(function(descendant)
+		if descendant:IsA("BasePart") then
+			descendant.CollisionGroup = PLAYER_COLLISION_GROUP
+		end
+	end)
+end
+
+--[[
+	Setup Player
+	Mengatur event untuk karakter player saat ini dan yang akan datang
+	@param player - Instance Player
+--]]
+local function setupPlayer(player)
+	-- Setup karakter yang sudah ada
+	if player.Character then
+		setupCharacter(player.Character)
+	end
+	
+	-- Setup untuk karakter baru (respawn)
+	player.CharacterAdded:Connect(setupCharacter)
+end
+
+-- Initialize
+do
+	-- Setup collision groups saat server start
+	setupCollisionGroups()
+	
+	-- Setup untuk semua player yang sudah ada
+	for _, player in pairs(Players:GetPlayers()) do
+		setupPlayer(player)
+	end
+	
+	-- Setup untuk player baru yang join
+	Players.PlayerAdded:Connect(setupPlayer)
+	
+	print("[Player Noclip] Script initialized successfully")
+end
